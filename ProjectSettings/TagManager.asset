@@ -8,6 +8,8 @@ TagManager:
   - Walkable
   - WallCheck
   - Killer
+  - Killer
+  - NPC
   layers:
   - Default
   - TransparentFX

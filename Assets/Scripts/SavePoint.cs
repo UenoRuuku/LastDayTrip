@@ -9,4 +9,11 @@ public class SavePoint : MonoBehaviour
     public string GetName() {
         return Name;
     }
+
+    public void OnTriggerEnter2D(Collider2D collision)
+    {
+        if (collision.CompareTag("Player")) {
+            GameManager.Instance.SetLastSavePoint(this);
+        }
+    }
 }

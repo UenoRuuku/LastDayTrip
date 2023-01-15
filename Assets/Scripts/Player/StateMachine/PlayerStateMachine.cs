@@ -4,15 +4,16 @@ using System;
 using UnityEngine;
 
 public enum PlayerStateName {
-    Normal_Controlable, Death
+    Normal_Controlable, Death,Dialogue
 }
 
 
 [Serializable]
 public class PlayerParameter {
-    public GameObject DeathAnimation;
+    public DeathEffector DeathAnimation;
     public float DeathForce;
     public float DeathTime;
+    public Transform DeathPos;
 
 }
 
@@ -33,6 +34,7 @@ public class PlayerStateMachine : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
+        States = new Dictionary<PlayerStateName, IState>();
         States.Add(PlayerStateName.Normal_Controlable, new NormalState(this));
         States.Add(PlayerStateName.Death, new DeathState(this,p));
         CurrentState = PlayerStateName.Normal_Controlable;
@@ -56,8 +58,13 @@ public class PlayerStateMachine : MonoBehaviour
     private void OnTriggerEnter2D(Collider2D collision)
     {
         if (collision.CompareTag("Killer") && CurrentState != PlayerStateName.Death) {
-            TransState(PlayerStateName.Death);
+
             Killer = collision.gameObject;
+            //DeathPos = collision.bounds.ClosestPoint(transform.position);
+            TransState(PlayerStateName.Death);
+        }
+        if (collision.CompareTag("NPC") && CurrentState != PlayerStateName.Dialogue && CurrentState != PlayerStateName.Death) {
+            TransState(PlayerStateName.Dialogue);
         }
     }
 
@@ -66,7 +73,8 @@ public class PlayerStateMachine : MonoBehaviour
     }
 
     public void InstantiateDeath() {
-        Instantiate(p.DeathAnimation, transform.position, new Quaternion(0,0,0,0));
+        p.DeathAnimation.Play(p.DeathPos.position);
+        //p.DeathAnimation.Play();
     }
 
 }

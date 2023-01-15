@@ -18,7 +18,7 @@ public class NormalState : IState
     public void OnExit()
     {
 
-        Player.GetComponent<NormalController>().enabled = false;
+        Player.GetComponent<NormalController>().Stop();
     }
 
     public void OnUpdate()

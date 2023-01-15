@@ -25,6 +25,7 @@ public class NormalController : MonoBehaviour
     bool isDashing;
     bool isRiding;
 
+    [Header("---- Outer GameObject ----")]
     [SerializeField]
     GroundCheck gc;
     [SerializeField]
@@ -56,6 +57,7 @@ public class NormalController : MonoBehaviour
         am = GetComponent<Animator>();
         imp = GetComponent<Cinemachine.CinemachineImpulseSource>();
         spr = GetComponent<SpriteRenderer>();
+        TimeBackQueue = new Queue<NormalControllerPlayerStatus>();
         ls = transform.localScale;
         InertialC.SetAutoKill(false);
     }
@@ -70,12 +72,7 @@ public class NormalController : MonoBehaviour
         Space = KeyCodeManager.Instance.Jump;
     }
 
-    [SerializeField]
-    float speed = 3;
-    [SerializeField]
-    int jumpPoint = 1;
-    [SerializeField]
-    int Max_Jumpoint;
+
 
     private void Update()
     {
@@ -90,7 +87,7 @@ public class NormalController : MonoBehaviour
             }
             Dash();
         }
-        else if(isOnWall && !isDashing) {
+        else if (isOnWall && !isDashing) {
             OnWallJump();
         }
         if (!isDashing && !isOnWall) {
@@ -101,10 +98,18 @@ public class NormalController : MonoBehaviour
             RideVelocityAdjust();
         }
         UpdateAnim();
+        UpdateTimeBack();
+        Back();
     }
+
+
+    #region Ride
+
+    [Header("---- Ride ----")]
     [SerializeField]
     float InertiaTime;
     Tweener InertialC;
+
     enum RideType {
         Wall, Ground
     }
@@ -126,7 +131,7 @@ public class NormalController : MonoBehaviour
             //切状态
             if (isRiding) {
                 InertialC.Pause();
-                InertialC = DOVirtual.Vector3(RideSpeed, Vector3.zero, InertiaTime,(Vector3 s)=> { rb.velocity += RideSpeed; });
+                InertialC = DOVirtual.Vector3(RideSpeed, Vector3.zero, InertiaTime, (Vector3 s) => { rb.velocity += RideSpeed; });
             }
             if (isOnGround() || isOnWall) {
                 InertialC.Pause();
@@ -136,9 +141,6 @@ public class NormalController : MonoBehaviour
         }
     }
 
-
-
-
     void RideAnimUpdate() {
     }
 
@@ -146,7 +148,7 @@ public class NormalController : MonoBehaviour
         if (rideType == RideType.Wall)
         {
             RideSpeed = wc.RidingSpeed;
-        
+
             rb.velocity += RideSpeed;
 
             //逆向爬墙时略微加速抓的更紧，不修改RideSpeed不影响离开时的惯性
@@ -162,38 +164,67 @@ public class NormalController : MonoBehaviour
         }
     }
 
+    #endregion
+
+    #region Move
+    [Header("---- Move ----")]
+    [SerializeField]
+    float speed = 15;
+    [SerializeField]
+    int AccelerateFrameSpeed = 1;
+    [SerializeField]
+    int DecelerateFrameSpeed = 2;
+    [SerializeField]
+    int MoveFrame = 6;
+    int MoveBuffer = 0;
+    int dir = 1;
     void Move() {
         if (Input.GetKey(D))
         {
-            if (!isWallJumping) {
-                rb.velocity = new Vector2(Mathf.Abs(transform.localScale.x) * speed, rb.velocity.y);
-            }
-            else{
-                rb.velocity = Vector2.Lerp(rb.velocity,new Vector2(Mathf.Abs(transform.localScale.x) * speed, rb.velocity.y),2f * Time.deltaTime);
-            }
-            isRunning = true;
-            transform.localScale = new Vector3(ls.x, ls.y);
-        }
-        if (Input.GetKey(A))
-        {
-            if (!isWallJumping)
+            if (MoveBuffer < MoveFrame)
             {
-                rb.velocity = new Vector2(-Mathf.Abs(transform.localScale.x) * speed, rb.velocity.y);
+                MoveBuffer += AccelerateFrameSpeed;
             }
-            else
-            {
-                rb.velocity = Vector2.Lerp(rb.velocity, new Vector2(-Mathf.Abs(transform.localScale.x) * speed, rb.velocity.y), 2f * Time.deltaTime);
-            }
-            isRunning = true;
-            transform.localScale = new Vector3(-ls.x, ls.y);
+            dir = 1;
         }
-        if (!Input.GetKey(A) && !Input.GetKey(D) && rb.velocity.x != 0)
+        else if (Input.GetKey(A))
         {
-            rb.velocity = new Vector2(0, rb.velocity.y);
+            if (MoveBuffer < MoveFrame)
+            {
+                MoveBuffer += AccelerateFrameSpeed;
+            }
+            dir = -1;
+        }
+        else if (MoveBuffer > 0) {
+            MoveBuffer -= DecelerateFrameSpeed;
+        }
+
+        if (MoveBuffer > 0)
+        {
+            transform.localScale = new Vector3(dir * ls.x, ls.y, ls.z);
+            isRunning = true;
+        }
+        else {
             isRunning = false;
+        }
+
+        if (!isWallJumping)
+        {
+            rb.velocity = new Vector2(dir * Mathf.Abs(transform.localScale.x) * speed * MoveBuffer / MoveFrame, rb.velocity.y);
+        }
+        else
+        {
+            rb.velocity = Vector2.Lerp(rb.velocity, new Vector2(Mathf.Abs(transform.localScale.x) * speed * dir, rb.velocity.y), 2f * Time.deltaTime);
         }
     }
 
+    #endregion
+
+    #region Jump
+    int jumpPoint = 1;
+    [Header("---- Jump ----")]
+    [SerializeField]
+    int Max_Jumpoint;
     [SerializeField]
     float jumpSpeed = 6;
     [SerializeField]
@@ -208,7 +239,7 @@ public class NormalController : MonoBehaviour
         {
             jumpBuffer = JumpBufferFrame;
         }
-        else if(jumpBuffer > 0){
+        else if (jumpBuffer > 0) {
             jumpBuffer--;
         }
         if (jumpPoint > 0 && jumpBuffer > 0 && !isJumping && !isWallJumping && isOnGround()) {
@@ -236,9 +267,12 @@ public class NormalController : MonoBehaviour
             jumpPoint = Max_Jumpoint;
         }
     }
+    #endregion
 
+    #region Dash
     Coroutine dashC;
     Tweener DragT;
+    [Header("---- Dash ----")]
     [SerializeField]
     float DashRange = 10;
     [SerializeField]
@@ -246,7 +280,7 @@ public class NormalController : MonoBehaviour
     [SerializeField]
     float DashSpeed = 20;
     enum DashDir {
-        None,Up,Down,Left,Right
+        None, Up, Down, Left, Right
     }
     DashDir dashDirY;
     DashDir dashDirX;
@@ -280,9 +314,9 @@ public class NormalController : MonoBehaviour
         {
             dashDirY = DashDir.None;
         }
-        if (Input.GetKeyDown(J)){
+        if (Input.GetKeyDown(J)) {
             DashBuffer = DashBufferFrame;
-        }else {
+        } else {
             DashBuffer--;
         }
         if (DashBuffer > 0 && DashPoint > 0 && !isDashing) {
@@ -293,7 +327,7 @@ public class NormalController : MonoBehaviour
             if (dashDirX != DashDir.None || dashDirY != DashDir.None)
             {
                 //屏幕震动
-                de.GenerateEffect(transform, DashDuration,spr.sprite);
+                de.GenerateEffect(transform, DashDuration, spr.sprite);
                 imp.GenerateImpulse();
                 dashP.Play();
             }
@@ -323,7 +357,7 @@ public class NormalController : MonoBehaviour
                 rb.velocity = new Vector2(0, 0);
                 break;
         }
-        switch (dashDirX) { 
+        switch (dashDirX) {
             case DashDir.Left:
                 rb.velocity = new Vector2(-DashSpeed * Mathf.Abs(transform.localScale.y), rb.velocity.y);
                 break;
@@ -339,7 +373,7 @@ public class NormalController : MonoBehaviour
         }
         DragT.Complete();
         DragT = DOVirtual.Float(DashRange, 0, DashDuration, RigidbodyDrag);
-        yield return new WaitForSeconds(DashDuration-0.1f);
+        yield return new WaitForSeconds(DashDuration - 0.1f);
         dashP.Stop();
         am.speed = 1;
         isDashing = false;
@@ -364,10 +398,12 @@ public class NormalController : MonoBehaviour
         RigidbodyDrag(0);
         dashP.Stop();
         DashPoint = Max_DashPoint;
-
     }
 
+    #endregion
 
+    #region Gravity
+    [Header("---- Gravity Adjuster ----")]
     [SerializeField]
     float JumpMultiplier;
     [SerializeField]
@@ -378,12 +414,12 @@ public class NormalController : MonoBehaviour
     float Half_GravitySpeed;
 
     void AdjustGravity() {
-        if (rb.velocity.y > 0 && !Input.GetKey(Space))
+        if (rb.velocity.y > 0 && !Input.GetKey(Space) && !isRiding)
         {
             rb.velocity += Vector2.up * Physics2D.gravity.y * JumpMultiplier * Time.fixedDeltaTime * Mathf.Abs(transform.localScale.y);
             rb.gravityScale = 1;
         }
-        else if (rb.velocity.y < 0)
+        else if (rb.velocity.y < 0 && !isRiding)
         {
             //print(rb.velocity.y / Mathf.Abs(transform.localScale.y));
             if (rb.velocity.y > -Half_GravitySpeed * Mathf.Abs(transform.localScale.y))
@@ -404,9 +440,12 @@ public class NormalController : MonoBehaviour
             rb.gravityScale = 1;
         }
     }
+    #endregion
 
+    #region OnWallCheck
     int OnWallBufferL;
     int OnWallBufferR;
+    [Header("---- OnWall Check ----")]
     [SerializeField]
     int OnWallBufferFrame = 6;
     void OnWallCheck() {
@@ -448,14 +487,17 @@ public class NormalController : MonoBehaviour
             slideP.gameObject.SetActive(false);
         }
     }
+
+    #endregion
+
+    #region OnWall Jump
+    [Header("---- OnWall Jump ----")]
     [SerializeField]
     float WallSpeed;
     [SerializeField]
     float WallJumpSpeedX;
     [SerializeField]
     float WallJumpSpeedY;
-    [SerializeField]
-    float WallJumpUncontrolableTime = 0.15f;
 
 
     bool isWallJumping;
@@ -463,7 +505,15 @@ public class NormalController : MonoBehaviour
     void OnWallJump() {
         if (!isWallJumping)
         {
-            rb.velocity = Vector2.down * Mathf.Abs(transform.localScale.y) * WallSpeed;
+            if (Input.GetKey(S))
+            {
+
+                rb.velocity = Vector2.down * Mathf.Abs(transform.localScale.y) * WallSpeed;
+
+            }
+            else {
+                rb.velocity = Vector2.down * 0;
+            }
             jumpPoint = Max_Jumpoint;
         }
         if (Input.GetKeyDown(KeyCode.Space))
@@ -474,9 +524,10 @@ public class NormalController : MonoBehaviour
             jumpBuffer--;
         }
         //蹬墙跳
-        if (jumpBuffer > 0 && !isWallJumping) {
+        if (jumpBuffer > 0 && !isWallJumping && jumpPoint > 0) {
             OnWallBufferL = 0;
             OnWallBufferR = 0;
+            jumpPoint--;
             int i = transform.localScale.x > 0 ? -1 : 1;
             wallJumpP.Play();
             rb.velocity = new Vector2(i * Mathf.Abs(transform.localScale.y) * WallJumpSpeedX, Mathf.Abs(transform.localScale.y) * WallJumpSpeedY);
@@ -486,7 +537,11 @@ public class NormalController : MonoBehaviour
     }
 
 
+    #endregion
+
+    #region OnGround Check
     int OnGroundBuffer = 0;
+    [Header("---- OnGround Check ----")]
     [SerializeField]
     int OnGroundBufferFrame = 12;
     bool isOnGround() {
@@ -497,7 +552,7 @@ public class NormalController : MonoBehaviour
         else if (OnGroundBuffer > 0) {
             OnGroundBuffer--;
         }
-        return OnGroundBuffer > 0 ;
+        return OnGroundBuffer > 0;
     }
 
     bool isOnGroundNoBuffer() {
@@ -508,10 +563,85 @@ public class NormalController : MonoBehaviour
         return wc.isOnGround;
     }
 
+    #endregion
     void UpdateAnim() {
         am.SetBool("isRunning", isRunning);
         am.SetBool("isJumping", isJumping);
         am.SetBool("isFalling", isFalling);
         am.SetBool("isOnWall", isOnWall);
+    }
+
+    public void Stop() {
+        EndDash();
+        enabled = false;
+    }
+
+    #region back
+    [SerializeField]
+    int TimeBackLength = 3;
+    Queue<NormalControllerPlayerStatus> TimeBackQueue;
+    void UpdateTimeBack() {
+        TimeBackQueue.Enqueue(new NormalControllerPlayerStatus(transform.position, isRunning, isJumping, isOnWall, isFalling, transform.localScale.x > 0?1:-1));
+        if (TimeBackQueue.Count > TimeBackLength / Time.deltaTime) {
+            TimeBackQueue.Dequeue();
+        }
+    }
+
+    void Back() {
+        if (Input.GetKeyDown(K)) {
+            transform.position = GetTimeBackStatus().pos;
+            isRunning = GetTimeBackStatus().isRunning;
+            isJumping = GetTimeBackStatus().isJumping;
+            isFalling = GetTimeBackStatus().isFalling;
+            transform.localScale = new Vector3(Mathf.Abs(ls.x) * GetTimeBackStatus().scale, ls.y, ls.z);
+            TimeBackQueue.Clear();
+        }
+    }
+
+    public NormalControllerPlayerStatus GetTimeBackStatus() {
+        if (TimeBackQueue.Count > 0)
+        {
+            return TimeBackQueue.Peek();
+
+        }
+        else {
+            return null;
+        }
+    }
+    #endregion
+}
+
+
+public class NormalControllerPlayerStatus {
+    public NormalControllerPlayerStatus(Vector2 p, bool r, bool j, bool of, bool f, int s) {
+        pos = p;
+        isRunning = r;
+        isJumping = j;
+        isOnWall = of;
+        isFalling = f;
+        scale = s;
+    }
+    public Vector2 pos {
+        get;private set;
+    }
+    public bool isRunning
+    {
+        get; private set;
+    }
+    public bool isJumping
+    {
+        get; private set;
+    }
+    public bool isOnWall
+    {
+        get; private set;
+    }
+    public bool isFalling
+    {
+        get; private set;
+    }
+
+    public int scale {
+        get;private set;
     }
 }
